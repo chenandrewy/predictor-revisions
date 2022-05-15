@@ -15,10 +15,6 @@ library(gridExtra)
 
 dir.create('../data/')
 
-
-# old is April 2021 
-
-
 # use this for original papers
 SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
 
@@ -52,7 +48,7 @@ url = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_D
 download.file(url,'../data/deleteme.zip')
 unzip('../data/deleteme.zip', exdir = '../data')
 
-# doesn't work
+# dl from web.archive.org like this doesn't work
 # temp_url = 'https://web.archive.org/web/20011218003540/http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Benchmark_Factors_Monthly.zip'
 # download.file(temp_url, '../data/deleteme.zip')
 # unzip('../data/deleteme.zip', exdir = '../data')
@@ -95,7 +91,7 @@ ff_all = fread('../data/F-F_Research_Data_Factors.CSV')  %>%
   
 colnames(ff_all) = c('yearm', 'mktrf', 'smb', 'hml', 'rf', 'vint')
 
-# PERFORMANCE MEASURES ====
+## Performance Measures ====
 
 target_data = cz_all %>% 
   filter(vint == 2022 & insamp & port == 'LS') %>% 
@@ -166,14 +162,33 @@ fit_ff_2005 = fitme[
 
 fit_all = fit_raW %>% rbind(fit_ff_2012) %>% rbind(fit_ff_2022) %>% rbind(fit_ff_2005)
 
-# Quick Histogram ====
+# HML revisions rep ====
 
-ggplot(fit_all, aes(x=tstat)) +
-  geom_histogram(
-    aes(fill = model), alpha = 0.5, position = 'dodge'
+ff_all %>% 
+  group_by(vint) %>% 
+  summarize_at(.vars =vars(mktrf,smb,hml), sd)
+
+temp = ff_all %>% 
+  select(yearm,vint,hml) %>% 
+  pivot_wider(
+    names_from = vint, values_from = hml, names_prefix = 'vint'
+  ) %>% 
+  mutate(
+    rev = vint2022- vint2012, time = floor(yearm/100) + (yearm/100 - floor(yearm/100))/0.12
+  ) %>% 
+  filter(
+    !is.na(rev)
   )
 
-# Scatter - raw ====
+
+ggplot(temp) +
+  geom_line(aes(x=time,y=rev)) +
+  theme_minimal(
+    base_size = 20
+  ) +
+  ylab('HML revision (%, monthly)')
+
+# Name Scatter ====
 
 
 # select comparable t-stats
@@ -228,9 +243,9 @@ fitcomp %>%
   theme(
     legend.position = c(.9, .25), legend.title = element_blank()
   ) +
-  geom_abline(
-    data = ablines, aes(slope = slope, intercept = intercept, linetype = group)
-  ) +    
+  # geom_abline(
+  #   data = ablines, aes(slope = slope, intercept = intercept, linetype = group)
+  # ) +    
   annotate('text',x=3.3, y=15, label = regstr, size = 7) + 
   labs(y = 't-stat Chen-Zimmermann', 
        x = 't-stat Original Paper')  
@@ -238,8 +253,251 @@ fitcomp %>%
 
 ggsave('../results/rep_vs_op_raw.pdf', width = 10, height = 6, scale = 1.1)
 
+# Simple Scatterplots ====
 
-# FF 2012 VS 2022====
+## Prepare signal doc ====
+
+catname = c('raw','factor or char adjusted','nonstandard lag')
+
+# select comparable t-stats
+fit_OP = doc %>% 
+  mutate(
+    tstat_OP = abs(as.numeric(`T-Stat`))
+  ) %>% 
+  select(
+    signalname, tstat_OP, `Predictability in OP`
+    , `Signal Rep Quality`, `Test in OP`, `Evidence Summary`
+    , SampleEndYear
+  ) %>% 
+  filter(
+    `Signal Rep Quality` %in% c('1_good','2_fair')
+    , grepl('port sort', `Test in OP`)
+    , `Predictability in OP` != 'indirect'
+  )  %>% 
+  filter(!is.na(tstat_OP)) %>%   # some port sorts have only point estimates 
+  mutate(
+    adjusted = if_else(
+      `Test in OP` == 'port sort' 
+      , catname[1]
+      , catname[2]
+    ) 
+    , adjusted = if_else(
+      grepl('nonstandard', `Evidence Summary`)
+      , catname[3], adjusted
+    )
+    , adjusted = factor(
+      adjusted
+      , levels = catname
+    )
+  )
+
+
+
+## Raw vs OP plot ====
+
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'raw') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP
+    , by = 'signalname'
+  ) 
+
+# plot
+tempname = 'Original Method'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4, aes(shape =adjusted, fill = adjusted)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.9, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (see legend)'
+       , y = 't-stat Replicated (raw)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+
+
+ggsave('../results/raw_op.png', width = 10, height = 6, scale = 1.1)
+
+## FF 22 vs OP ====
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'ff3_2022') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP
+    , by = 'signalname'
+  ) 
+
+# plot
+tempname = 'Original Method'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4, aes(shape =adjusted, fill = adjusted)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.9, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (see legend)'
+       , y = 't-stat Rep (FF3-alpha, 2022 vintage)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+
+
+ggsave('../results/ff22_op.png', width = 10, height = 6, scale = 1.1)
+
+# check
+fitcomp %>% 
+  select(signalname, tstat_CZ, tstat_OP) %>% arrange(-tstat_CZ)
+
+## FF 12 vs OP ====
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'ff3_2012') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP, by = 'signalname'
+  ) 
+
+# plot
+tempname = 'Original Method'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4, aes(shape =adjusted, fill = adjusted)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.9, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (see legend)'
+       , y = 't-stat Rep (FF3-alpha, 2012 vintage)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+
+ggsave('../results/ff12_op.png', width = 10, height = 6, scale = 1.1)
+
+
+
+
+
+## FF 05 vs OP ====
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'ff3_2005') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP, by = 'signalname'
+  ) %>% 
+  filter(
+    SampleEndYear <= 2005
+  )
+
+# plot
+tempname = 'Original Method'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4, aes(shape =adjusted, fill = adjusted)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.9, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (see legend)'
+       , y = 't-stat Rep (FF3-alpha, 2012 vintage)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+
+
+ggsave('../results/ff05_op.png', width = 10, height = 6, scale = 1.1)
+
+
+## FF All vs OP ====
+
+# merge 
+fitcomp = fit_all %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP, by = 'signalname'
+  ) %>% 
+  filter(
+    !(model == 'ff3_2005' & SampleEndYear > 2005)
+    , model != 'raw'
+  )
+
+# plot
+tempname = 'FF Vintage'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4
+       , aes(shape =model, fill = model)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.9, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23, 24), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray', 'red'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (mostly raw)'
+       , y = 't-stat Rep (FF3-alpha)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+
+
+ggsave('../results/ffall_op.png', width = 10, height = 6, scale = 1.1)
+
+# Summary Stuff ====
+
 
 ## FF adjusted vs raw ====
 plotme = fit_all %>% 
@@ -280,13 +538,6 @@ ggsave('../results/ff3_vs_raw.pdf', width = 8, height = 8, scale = 0.6)
 
 
 
-# list bad obs with evidence
-plotme %>% 
-  filter(model == 'ff3_2022') %>% 
-  arrange(tstat) %>% head(20) %>% 
-  left_join(doc %>% select(signalname, `Evidence Summary`)) %>% 
-  select(signalname, tstat_cz, tstat, `Evidence Summary`)
-
 
 ## FF 2022 vs FF 2012 ====
 
@@ -298,7 +549,7 @@ plotme = fit_all %>%
       names_from = 'model', values_from = 'tstat'
   ) %>% 
   mutate(
-    new_m_old = - ff3_2022 + ff3_2005
+    new_m_old = - ff3_2022 + ff3_2005, pct_chg = new_m_old/ff3_2022*100
   ) %>% 
   as.data.frame()
   
@@ -323,6 +574,11 @@ fitme = target_data %>%
   left_join(
     ff_all %>% filter(vint == 2005), by = 'yearm'
   )
+
+# reference
+fitsum = summary(lm(ret ~ mktrf+smb+hml, data = fitme))
+fitsum$coefficients
+
 
 fitx = fitme[
   , list(
@@ -354,6 +610,77 @@ fitx %>%
   )
 
 
-# reference
-fitsum = summary(lm(ret ~ mktrf+smb+hml, data = fitme))
-fitsum$coefficients
+hist(fitx$bhml)
+hist(fitx$bmkt)
+hist(fitx$bsmb)
+
+# Detail check ====
+
+
+# list bad obs with evidence
+plotme %>% 
+  filter(model == 'ff3_2022') %>% 
+  mutate(delta = tstat - tstat_cz) %>% 
+  arrange(-delta) %>% 
+  left_join(doc %>% select(signalname, `Evidence Summary`)) %>% 
+  select(signalname, tstat_cz, tstat, `Evidence Summary`) %>% 
+  as.data.frame() %>% 
+  head(20)
+
+
+
+# list bad obs with evidence
+plotme %>% 
+  filter(model == 'ff3_2022') %>% 
+  mutate(delta = tstat - tstat_cz) %>% 
+  arrange(delta) %>% 
+  left_join(doc %>% select(signalname, `Evidence Summary`)) %>% 
+  select(signalname, tstat_cz, tstat, `Evidence Summary`) %>% 
+  as.data.frame() %>% 
+  head(50)
+
+fit_all %>% filter(signalname == 'hire')
+
+fit_all %>% filter(grepl('InvG', signalname))
+
+fit_all %>% filter(grepl('Brand', signalname))
+
+fit_all %>% filter(grepl('CBOper', signalname))
+
+
+# Decomp of revision ====
+
+
+
+targetdat = cz_all %>% 
+  filter(vint == 2022, insamp, port == 'LS') %>% 
+  mutate(yearm = year(date)*100 + month(date)) %>% 
+  select(signalname, yearm, ret)
+
+
+revdat = targetdat %>% 
+  left_join(
+    ff_all %>% filter(vint == 2022) %>% transmute(yearm, hml22 = hml)
+  ) %>% 
+  left_join(
+    ff_all %>% filter(vint == 2012) %>% transmute(yearm, hml12 = hml)
+  )  %>% 
+  mutate(
+    rev_hml = hml22-hml12
+  )
+
+cordat  = revdat %>% 
+  group_by(signalname) %>% 
+  summarize(
+    cor_rev = cor(ret, rev_hml)
+    , acor = abs(cor_rev)
+  )
+
+ggplot(cordat, aes(x=acor)) +
+  geom_histogram(bins = 10) +
+  theme_minimal(
+    base_size = 20
+  ) +
+  xlab('|cor(ret,hml revision)|')
+
+0.2*0.4*0.2
