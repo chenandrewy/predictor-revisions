@@ -15,44 +15,39 @@ library(gridExtra)
 
 dir.create('../data/')
 
-# use this for original papers
-SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
 
 ## Download ====
 
-# April 2021  cz data
-url <- "https://drive.google.com/drive/folders/1I6nMmo8k_zGCcp9tUvmMedKTAkb9734R"
-url %>% drive_ls() %>%
-  filter(name == "Portfolios") %>% drive_ls() %>% 
-  filter(name == SUBDIR) %>% drive_ls() %>% 
-  filter(name == FILENAME) %>% 
-  drive_download(path = paste0("../data/old-",FILENAME), overwrite = TRUE)
+if (exists('../data/new-PredictorPortsFull.csv')){
 
-# signal doc (new)
-url %>% drive_ls() %>% 
-  filter(name == "SignalDoc.csv") %>% 
-  drive_download(path = "../data/SignalDoc.csv", overwrite = TRUE)
+  # March 2022 cz data
+  url <- "https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo" 
+  # use this for original papers
+  SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
+  url %>% drive_ls() %>%
+    filter(name == "Portfolios") %>% drive_ls() %>% 
+    filter(name == SUBDIR) %>% drive_ls() %>% 
+    filter(name == FILENAME) %>% 
+    drive_download(path = paste0("../data/new-",FILENAME), overwrite = TRUE)
+  
+  # signal doc 
+  url %>% drive_ls() %>% 
+    filter(name == "SignalDoc.csv") %>% 
+    drive_download(path = "../data/SignalDoc.csv", overwrite = TRUE)
+  
+  
+  # download FF (new)
+  url = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip'
+  download.file(url,'../data/deleteme.zip')
+  unzip('../data/deleteme.zip', exdir = '../data')
+  
+  # dl from web.archive.org like this doesn't work
+  # temp_url = 'https://web.archive.org/web/20011218003540/http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Benchmark_Factors_Monthly.zip'
+  # download.file(temp_url, '../data/deleteme.zip')
+  # unzip('../data/deleteme.zip', exdir = '../data')
 
 
-# March 2022 cz data
-url <- "https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo" 
-url %>% drive_ls() %>%
-  filter(name == "Portfolios") %>% drive_ls() %>% 
-  filter(name == SUBDIR) %>% drive_ls() %>% 
-  filter(name == FILENAME) %>% 
-  drive_download(path = paste0("../data/new-",FILENAME), overwrite = TRUE)
-
-
-# download FF (new)
-url = 'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip'
-download.file(url,'../data/deleteme.zip')
-unzip('../data/deleteme.zip', exdir = '../data')
-
-# dl from web.archive.org like this doesn't work
-# temp_url = 'https://web.archive.org/web/20011218003540/http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Benchmark_Factors_Monthly.zip'
-# download.file(temp_url, '../data/deleteme.zip')
-# unzip('../data/deleteme.zip', exdir = '../data')
-
+} # if exists
 
 ## Import ====
 
@@ -186,7 +181,20 @@ ggplot(temp) +
   theme_minimal(
     base_size = 20
   ) +
-  ylab('HML revision (%, monthly)')
+  ylab('HML revision (ppt)') +
+  annotate(
+    geom = 'text', x = 1980, y = 4.2
+    , label = paste0(
+      'SD(revision) = ', round(sd(temp$rev),3), '\n'
+      , 'SD(HML 2022) = ', round(sd(temp$vint2022), 3)
+    )
+    , size = 6
+  ) +
+  xlab(NULL)
+
+
+
+ggsave('../results/hml-rev.png', width = 8, height = 5)
 
 # Name Scatter ====
 
@@ -314,7 +322,7 @@ fitcomp %>%
     base_size = 15
   ) +
   theme(
-    legend.position = c(.9, .25)
+    legend.position = c(.8, .25)
   ) +
   geom_abline(
     aes(slope = 1, intercept = 0)
@@ -327,10 +335,13 @@ fitcomp %>%
   ) +
   labs(x = 't-stat Original Paper (see legend)'
        , y = 't-stat Replicated (raw)')  +
-  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
+  
 
 
-ggsave('../results/raw_op.png', width = 10, height = 6, scale = 1.1)
+ggsave('../results/raw_op.png', width = 10, height = 6, scale = 0.7)
 
 ## FF 22 vs OP ====
 
@@ -352,7 +363,7 @@ fitcomp %>%
     base_size = 15
   ) +
   theme(
-    legend.position = c(.9, .25)
+    legend.position = c(.8, .25)
   ) +
   geom_abline(
     aes(slope = 1, intercept = 0)
@@ -365,10 +376,12 @@ fitcomp %>%
   ) +
   labs(x = 't-stat Original Paper (see legend)'
        , y = 't-stat Rep (FF3-alpha, 2022 vintage)')  +
-  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
 
 
-ggsave('../results/ff22_op.png', width = 10, height = 6, scale = 1.1)
+ggsave('../results/ff22_op.png', width = 10, height = 6, scale = 0.7)
 
 # check
 fitcomp %>% 
@@ -393,7 +406,7 @@ fitcomp %>%
     base_size = 15
   ) +
   theme(
-    legend.position = c(.9, .25)
+    legend.position = c(.8, .25)
   ) +
   geom_abline(
     aes(slope = 1, intercept = 0)
@@ -406,9 +419,11 @@ fitcomp %>%
   ) +
   labs(x = 't-stat Original Paper (see legend)'
        , y = 't-stat Rep (FF3-alpha, 2012 vintage)')  +
-  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15))  +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
 
-ggsave('../results/ff12_op.png', width = 10, height = 6, scale = 1.1)
+ggsave('../results/ff12_op.png', width = 10, height = 6, scale = 0.7)
 
 
 
@@ -436,7 +451,7 @@ fitcomp %>%
     base_size = 15
   ) +
   theme(
-    legend.position = c(.9, .25)
+    legend.position = c(.8, .25)
   ) +
   geom_abline(
     aes(slope = 1, intercept = 0)
@@ -449,10 +464,12 @@ fitcomp %>%
   ) +
   labs(x = 't-stat Original Paper (see legend)'
        , y = 't-stat Rep (FF3-alpha, 2012 vintage)')  +
-  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15))  +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
 
 
-ggsave('../results/ff05_op.png', width = 10, height = 6, scale = 1.1)
+ggsave('../results/ff05_op.png', width = 10, height = 6, scale = 0.7)
 
 
 ## FF All vs OP ====
@@ -466,14 +483,16 @@ fitcomp = fit_all %>%
   filter(
     !(model == 'ff3_2005' & SampleEndYear > 2005)
     , model != 'raw'
+  ) mutate(
+    model = factor(model, levels = c('ff3_2022','ff3_2012','ff3_2005'))
   )
 
 # plot
-tempname = 'FF Vintage'
+tempname = 'Vintage'
 fitcomp %>% 
   ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
   geom_point(size=4
-       , aes(shape =model, fill = model)) +
+       , aes(shape =model, color = model)) +
   theme_minimal(
     base_size = 15
   ) +
@@ -484,17 +503,17 @@ fitcomp %>%
     aes(slope = 1, intercept = 0)
   ) +
   scale_shape_manual(
-    values = c(21, 22, 23, 24), name = tempname
+    values = c(4, 1, 2), name = tempname
   ) +
-  scale_fill_manual(
-    values = c('blue', 'white', 'gray', 'red'), name = tempname
+  scale_color_manual(
+    values = c('red', 'blue', 'blue'), name = tempname
   ) +
   labs(x = 't-stat Original Paper (mostly raw)'
        , y = 't-stat Rep (FF3-alpha)')  +
   coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) 
 
 
-ggsave('../results/ffall_op.png', width = 10, height = 6, scale = 1.1)
+ggsave('../results/ffall_op.png', width = 10, height = 6, scale = 0.7)
 
 # Summary Stuff ====
 
@@ -681,6 +700,8 @@ ggplot(cordat, aes(x=acor)) +
   theme_minimal(
     base_size = 20
   ) +
-  xlab('|cor(ret,hml revision)|')
+  xlab('|cor(ret,rev)|')
 
-0.2*0.4*0.2
+
+
+ggsave('../results/cor_ret_rev.png')
