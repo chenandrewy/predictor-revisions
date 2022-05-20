@@ -446,7 +446,9 @@ ggsave('../results/ff22_op.png', width = 10, height = 6, scale = 0.7)
 
 # check
 fitcomp %>% 
-  select(signalname, tstat_CZ, tstat_OP) %>% arrange(-tstat_CZ)
+  select(signalname, tstat_CZ, tstat_OP) %>% 
+  mutate(delta = tstat_CZ - tstat_OP) %>% 
+  arrange(-delta)
 
 ## FF 12 vs OP ====
 
