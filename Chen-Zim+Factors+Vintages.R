@@ -16,14 +16,16 @@ library(gridExtra)
 dir.create('../data/')
 
 
+# use this for original papers
+SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
+
 ## Download ====
 
-if (exists('../data/new-PredictorPortsFull.csv')){
+if (!file.exists('../data/new-PredictorPortsFull.csv')){
 
   # March 2022 cz data
   url <- "https://drive.google.com/drive/folders/1O18scg9iBTiBaDiQFhoGxdn4FdsbMqGo" 
-  # use this for original papers
-  SUBDIR = 'Full Sets OP'; FILENAME = 'PredictorPortsFull.csv'
+
   url %>% drive_ls() %>%
     filter(name == "Portfolios") %>% drive_ls() %>% 
     filter(name == SUBDIR) %>% drive_ls() %>% 
@@ -259,7 +261,66 @@ fitcomp %>%
        x = 't-stat Original Paper')  
 
 
-ggsave('../results/rep_vs_op_raw.pdf', width = 10, height = 6, scale = 1.1)
+ggsave('../results/rep_vs_op_raw.png', width = 10, height = 6, scale = 1.1)
+
+
+# Name Scatter cleaner ====
+
+ablines = tibble(slope = 1, 
+                 intercept = 0,
+                 group = factor(x = c('45 degree line'),
+                                levels = c('45 degree line')))
+
+
+# select comparable t-stats
+fit_OP = doc %>% 
+  mutate(
+    tstat_OP = abs(as.numeric(`T-Stat`))
+  ) %>% 
+  select(
+    signalname, tstat_OP, `Predictability in OP`, `Signal Rep Quality`, `Test in OP`
+  ) %>% 
+  filter(
+    `Signal Rep Quality` %in% c('1_good','2_fair')
+    , grepl('port', `Test in OP`)
+    , `Predictability in OP` != 'indirect'
+  ) 
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'raw') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP
+    , by = 'signalname'
+  ) %>% 
+  filter(!is.na(tstat_OP)) %>%  # some port sorts have only point estimates 
+  filter(tstat_CZ>0)  # for activism you can get a negative ff alpha
+
+
+fitcomp %>% 
+  ggplot(aes(y=tstat_CZ, x = tstat_OP)) +
+  geom_point(size=4) +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) +
+  ggrepel::geom_text_repel(aes(label=signalname), max.overlaps = Inf, box.padding = 0.5) +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
+  theme_minimal(
+    base_size = 20
+  ) +
+  theme(
+    legend.position = c(.9, .25), legend.title = element_blank()
+  ) +
+  geom_abline(
+    data = ablines, aes(slope = slope, intercept = intercept, linetype = group) 
+  ) +
+  labs(y = 't-stat Replicated', 
+       x = 't-stat Original Paper')  
+
+
+ggsave('../results/rep_vs_op_cleaner.png', width = 10, height = 8, scale = 1.1)
+ggsave('../results/rep_vs_op_cleaner_wide.png', width = 10, height = 6, scale = 1.1)
+
 
 # Simple Scatterplots ====
 
@@ -279,13 +340,13 @@ fit_OP = doc %>%
   ) %>% 
   filter(
     `Signal Rep Quality` %in% c('1_good','2_fair')
-    , grepl('port sort', `Test in OP`)
+    , grepl('port', `Test in OP`)
     , `Predictability in OP` != 'indirect'
-  )  %>% 
+  ) %>% 
   filter(!is.na(tstat_OP)) %>%   # some port sorts have only point estimates 
   mutate(
     adjusted = if_else(
-      `Test in OP` == 'port sort' 
+      `Test in OP` %in% c('port sort', 'LS port') # these are raw long-shorts
       , catname[1]
       , catname[2]
     ) 
@@ -483,7 +544,7 @@ fitcomp = fit_all %>%
   filter(
     !(model == 'ff3_2005' & SampleEndYear > 2005)
     , model != 'raw'
-  ) mutate(
+  ) %>%  mutate(
     model = factor(model, levels = c('ff3_2022','ff3_2012','ff3_2005'))
   )
 
@@ -506,7 +567,7 @@ fitcomp %>%
     values = c(4, 1, 2), name = tempname
   ) +
   scale_color_manual(
-    values = c('red', 'blue', 'blue'), name = tempname
+    values = c('blue', 'green', 'red'), name = tempname
   ) +
   labs(x = 't-stat Original Paper (mostly raw)'
        , y = 't-stat Rep (FF3-alpha)')  +
