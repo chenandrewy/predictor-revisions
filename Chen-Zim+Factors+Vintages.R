@@ -198,71 +198,6 @@ ggplot(temp) +
 
 ggsave('../results/hml-rev.png', width = 8, height = 5)
 
-# Name Scatter ====
-
-
-# select comparable t-stats
-fit_OP = doc %>% 
-  mutate(
-    tstat_OP = abs(as.numeric(`T-Stat`))
-  ) %>% 
-  select(
-    signalname, tstat_OP, `Predictability in OP`, `Signal Rep Quality`, `Test in OP`
-  ) %>% 
-  filter(
-    `Signal Rep Quality` %in% c('1_good','2_fair')
-    , grepl('port sort', `Test in OP`)
-    , `Predictability in OP` != 'indirect'
-  ) 
-
-# merge 
-fitcomp = fit_all %>% 
-  filter(model == 'raw') %>% 
-  rename(tstat_CZ = tstat) %>% 
-  inner_join(
-    fit_OP
-    , by = 'signalname'
-  ) %>% 
-  filter(!is.na(tstat_OP)) %>%  # some port sorts have only point estimates 
-  filter(tstat_CZ>0)  # for activism you can get a negative ff alpha
-
-
-# regression
-reg = lm(tstat_CZ ~ tstat_OP, data = fitcomp) %>% summary()
-regstr  = paste0(
-  '[Chen-Zim] = ', round(reg$coefficients[1], 2)
-  , ' + ', format(round(reg$coefficients[2], 2), nsmall = 2)
-  , ' [Original], R-sq = ', round(100*reg$r.squared, 0), '%'
-)
-
-ablines = tibble(slope = c(1, round(reg$coefficients[2], 2)), 
-                 intercept = c(0, round(reg$coefficients[1], 2)),
-                 group = factor(x = c('45 degree line', 'OLS fit'),
-                                levels = c('OLS fit', '45 degree line')))
-
-fitcomp %>% 
-  ggplot(aes(y=tstat_CZ, x = tstat_OP)) +
-  geom_point(size=4) +
-  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15)) +
-  ggrepel::geom_text_repel(aes(label=signalname), max.overlaps = 50, box.padding = 0.5) +
-  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
-  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
-  theme_minimal(
-    base_size = 20
-  ) +
-  theme(
-    legend.position = c(.9, .25), legend.title = element_blank()
-  ) +
-  # geom_abline(
-  #   data = ablines, aes(slope = slope, intercept = intercept, linetype = group)
-  # ) +    
-  annotate('text',x=3.3, y=15, label = regstr, size = 7) + 
-  labs(y = 't-stat Chen-Zimmermann', 
-       x = 't-stat Original Paper')  
-
-
-ggsave('../results/rep_vs_op_raw.png', width = 10, height = 6, scale = 1.1)
-
 
 # Name Scatter cleaner ====
 
@@ -309,13 +244,14 @@ fitcomp %>%
     base_size = 20
   ) +
   theme(
-    legend.position = c(.9, .25), legend.title = element_blank()
+    legend.position = c(.9, .1), legend.title = element_blank()
   ) +
   geom_abline(
     data = ablines, aes(slope = slope, intercept = intercept, linetype = group) 
+    , color = 'blue', size = 1.5
   ) +
-  labs(y = 't-stat Replicated', 
-       x = 't-stat Original Paper')  
+  labs(y = 't-stat Replicated (raw)', 
+       x = 't-stat Original Paper (mostly raw)')  
 
 
 ggsave('../results/rep_vs_op_cleaner.png', width = 10, height = 8, scale = 1.1)
@@ -526,7 +462,7 @@ fitcomp %>%
     values = c('blue', 'white', 'gray'), name = tempname
   ) +
   labs(x = 't-stat Original Paper (see legend)'
-       , y = 't-stat Rep (FF3-alpha, 2012 vintage)')  +
+       , y = 't-stat Rep (FF3-alpha, 2005 vintage)')  +
   coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15))  +
   scale_x_continuous(breaks=c(2, 5, 10, 15)) +
   scale_y_continuous(breaks=c(2, 5, 10, 15)) +
@@ -534,6 +470,48 @@ fitcomp %>%
 
 ggsave('../results/ff05_op.png', width = 10, height = 6, scale = 0.7)
 
+
+## FF 22 vs OP, pre 2005 samples ====
+
+# merge 
+fitcomp = fit_all %>% 
+  filter(model == 'ff3_2022') %>% 
+  rename(tstat_CZ = tstat) %>% 
+  inner_join(
+    fit_OP, by = 'signalname'
+  ) %>% 
+  filter(
+    SampleEndYear <= 2005
+  )
+
+# plot
+tempname = 'Original Method'
+fitcomp %>% 
+  ggplot(aes(x=tstat_OP, y = tstat_CZ)) +
+  geom_point(size=4, aes(shape =adjusted, fill = adjusted)) +
+  theme_minimal(
+    base_size = 15
+  ) +
+  theme(
+    legend.position = c(.8, .25)
+  ) +
+  geom_abline(
+    aes(slope = 1, intercept = 0)
+  ) +
+  scale_shape_manual(
+    values = c(21, 22, 23), name = tempname
+  ) +
+  scale_fill_manual(
+    values = c('blue', 'white', 'gray'), name = tempname
+  ) +
+  labs(x = 't-stat Original Paper (see legend)'
+       , y = 't-stat Rep (FF3-alpha, 2022 vintage)')  +
+  coord_trans(x='log10', y='log10', xlim = c(1.5, 17), ylim = c(1.0, 15))  +
+  scale_x_continuous(breaks=c(2, 5, 10, 15)) +
+  scale_y_continuous(breaks=c(2, 5, 10, 15)) +
+  
+  
+  ggsave('../results/ff22_op_pre05.png', width = 10, height = 6, scale = 0.7)
 
 ## FF All vs OP ====
 
